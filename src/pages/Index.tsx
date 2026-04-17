@@ -182,12 +182,221 @@ const MapSection = () => {
   );
 };
 
+// ─── New Order Modal ──────────────────────────────────────
+const CITIES = ["Москва", "Санкт-Петербург", "Казань", "Нижний Новгород", "Екатеринбург", "Челябинск", "Новосибирск", "Омск", "Ростов-на-Дону", "Краснодар", "Пермь", "Уфа", "Самара", "Воронеж"];
+const CARGO_TYPES = ["Электроника", "Стройматериалы", "Продукты питания", "Авто запчасти", "Промоборудование", "Химия", "Одежда и текстиль", "Мебель", "Медикаменты", "Другое"];
+
+const NewOrderModal = ({ onClose, onAdd }: { onClose: () => void; onAdd: (order: typeof ORDERS[0]) => void }) => {
+  const [form, setForm] = useState({ from: "", to: "", cargo: "", weight: "", driver: "" });
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [done, setDone] = useState(false);
+
+  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSubmit = () => {
+    const id = `ORD-${4822 + Math.floor(Math.random() * 10)}`;
+    onAdd({
+      id,
+      from: form.from,
+      to: form.to,
+      cargo: form.cargo,
+      weight: form.weight || "—",
+      status: "active",
+      driver: form.driver || "Не назначен",
+      progress: 0,
+      date: "17 апр",
+      doc: `НК-${id.slice(4)}`,
+    });
+    setDone(true);
+    setTimeout(onClose, 1400);
+  };
+
+  const canNext1 = form.from && form.to && form.from !== form.to;
+  const canNext2 = form.cargo;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }} onClick={onClose}>
+      <div
+        className="w-[480px] surface-1 border border-surface rounded-xl shadow-2xl animate-fade-in overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-surface">
+          <div>
+            <h3 className="font-semibold text-sm">Новый заказ</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {step === 1 ? "Откуда и куда" : step === 2 ? "Что везём" : "Назначить водителя"}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+            <Icon name="X" size={16} />
+          </button>
+        </div>
+
+        {/* Step indicator */}
+        <div className="flex px-5 pt-4 gap-1.5">
+          {[1, 2, 3].map(s => (
+            <div key={s} className="flex-1 h-0.5 rounded-full transition-all" style={{
+              background: s <= step ? "hsl(195 80% 52%)" : "hsl(220 12% 16%)"
+            }} />
+          ))}
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-5">
+          {done ? (
+            <div className="flex flex-col items-center gap-3 py-6 animate-fade-in">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: "hsl(142 60% 48% / 0.15)" }}>
+                <Icon name="Check" size={22} className="text-green" />
+              </div>
+              <p className="font-semibold text-sm">Заказ создан</p>
+              <p className="text-xs text-muted-foreground">{form.from} → {form.to}</p>
+            </div>
+          ) : step === 1 ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs text-muted-foreground">Откуда</label>
+                <select
+                  value={form.from}
+                  onChange={e => set("from", e.target.value)}
+                  className="w-full bg-secondary border border-surface rounded-lg px-3 py-2.5 text-sm outline-none focus:border-cyan-500/50 transition-colors appearance-none cursor-pointer"
+                >
+                  <option value="">Выберите город</option>
+                  {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              <div className="flex justify-center">
+                <div className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center">
+                  <Icon name="ArrowDown" size={13} className="text-muted-foreground" />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs text-muted-foreground">Куда</label>
+                <select
+                  value={form.to}
+                  onChange={e => set("to", e.target.value)}
+                  className="w-full bg-secondary border border-surface rounded-lg px-3 py-2.5 text-sm outline-none focus:border-cyan-500/50 transition-colors appearance-none cursor-pointer"
+                >
+                  <option value="">Выберите город</option>
+                  {CITIES.filter(c => c !== form.from).map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+          ) : step === 2 ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs text-muted-foreground">Тип груза</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {CARGO_TYPES.map(c => (
+                    <button
+                      key={c}
+                      onClick={() => set("cargo", c)}
+                      className={`text-left px-3 py-2 rounded-lg border text-xs transition-all
+                        ${form.cargo === c ? "border-cyan-500/50 text-cyan" : "border-surface text-muted-foreground hover:border-border hover:text-foreground"}
+                      `}
+                      style={form.cargo === c ? { background: "hsl(195 80% 52% / 0.07)" } : {}}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs text-muted-foreground">Вес (необязательно)</label>
+                <input
+                  placeholder="например: 5 т"
+                  value={form.weight}
+                  onChange={e => set("weight", e.target.value)}
+                  className="w-full bg-secondary border border-surface rounded-lg px-3 py-2.5 text-sm outline-none focus:border-cyan-500/50 transition-colors placeholder:text-muted-foreground"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-muted-foreground mb-1">Выберите свободного водителя</p>
+              {DRIVERS.filter(d => d.status === "free").map(d => (
+                <button
+                  key={d.id}
+                  onClick={() => set("driver", d.name.split(" ").slice(0, 2).join(" "))}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all text-left
+                    ${form.driver === d.name.split(" ").slice(0, 2).join(" ") ? "border-cyan-500/50" : "border-surface hover:border-border"}
+                  `}
+                  style={form.driver === d.name.split(" ").slice(0, 2).join(" ") ? { background: "hsl(195 80% 52% / 0.07)" } : {}}
+                >
+                  <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                    <span className="text-xs font-semibold text-muted-foreground">{d.name.split(" ").map(n => n[0]).slice(0, 2).join("")}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium truncate">{d.name}</p>
+                    <p className="text-xs text-muted-foreground">{d.vehicle}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Icon name="Star" size={10} className="text-amber" />
+                    <span className="font-mono text-xs">{d.rating}</span>
+                  </div>
+                </button>
+              ))}
+              <button
+                onClick={() => set("driver", "")}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all text-left
+                  ${form.driver === "" ? "border-cyan-500/50" : "border-surface hover:border-border"}
+                `}
+              >
+                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                  <Icon name="Clock" size={13} className="text-muted-foreground" />
+                </div>
+                <p className="text-xs text-muted-foreground">Назначить позже</p>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {!done && (
+          <div className="px-5 pb-5 flex gap-2">
+            {step > 1 && (
+              <button
+                onClick={() => setStep(s => (s - 1) as 1 | 2 | 3)}
+                className="flex-1 border border-surface rounded-lg py-2.5 text-sm text-muted-foreground hover:text-foreground transition-all"
+              >
+                Назад
+              </button>
+            )}
+            {step < 3 ? (
+              <button
+                onClick={() => setStep(s => (s + 1) as 1 | 2 | 3)}
+                disabled={step === 1 ? !canNext1 : !canNext2}
+                className="flex-1 rounded-lg py-2.5 text-sm font-medium text-background transition-all disabled:opacity-30"
+                style={{ background: "hsl(195 80% 52%)" }}
+              >
+                Далее
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                className="flex-1 rounded-lg py-2.5 text-sm font-medium text-background transition-all"
+                style={{ background: "hsl(195 80% 52%)" }}
+              >
+                Создать заказ
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // ─── Orders Section ───────────────────────────────────────
 const OrdersSection = () => {
   const [filter, setFilter] = useState<"all" | "active" | "done">("all");
   const [selectedOrder, setSelectedOrder] = useState<typeof ORDERS[0] | null>(null);
+  const [orders, setOrders] = useState(ORDERS);
+  const [showModal, setShowModal] = useState(false);
 
-  const filtered = ORDERS.filter((o) => {
+  const filtered = orders.filter((o) => {
     if (filter === "active") return o.status === "active" || o.status === "transit";
     if (filter === "done") return o.status === "done" || o.status === "cancelled";
     return true;
@@ -195,11 +404,26 @@ const OrdersSection = () => {
 
   return (
     <div className="flex-1 flex flex-col gap-4 animate-fade-in">
+      {showModal && (
+        <NewOrderModal
+          onClose={() => setShowModal(false)}
+          onAdd={(order) => setOrders(prev => [order, ...prev])}
+        />
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold">Заказы</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">{ORDERS.filter(o => o.status === "active" || o.status === "transit").length} активных</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{orders.filter(o => o.status === "active" || o.status === "transit").length} активных</p>
         </div>
+        <div className="flex items-center gap-2">
+        <button
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 font-medium text-background transition-all"
+          style={{ background: "hsl(195 80% 52%)" }}
+        >
+          <Icon name="Plus" size={12} />
+          Новый заказ
+        </button>
         <div className="flex bg-secondary rounded-lg p-0.5 text-xs">
           {(["all", "active", "done"] as const).map((f) => (
             <button
@@ -210,6 +434,7 @@ const OrdersSection = () => {
               {f === "all" ? "Все" : f === "active" ? "Активные" : "Архив"}
             </button>
           ))}
+        </div>
         </div>
       </div>
 
