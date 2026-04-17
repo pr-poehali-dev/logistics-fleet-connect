@@ -186,12 +186,45 @@ const MapSection = () => {
 const CITIES = ["Москва", "Санкт-Петербург", "Казань", "Нижний Новгород", "Екатеринбург", "Челябинск", "Новосибирск", "Омск", "Ростов-на-Дону", "Краснодар", "Пермь", "Уфа", "Самара", "Воронеж"];
 const CARGO_TYPES = ["Электроника", "Стройматериалы", "Продукты питания", "Авто запчасти", "Промоборудование", "Химия", "Одежда и текстиль", "Мебель", "Медикаменты", "Другое"];
 
+type UploadedFile = { name: string; size: string; type: string; status: "ready" | "uploading" | "done" };
+
+const DOC_TYPES = ["Накладная", "Квитанция", "Акт приёма", "Договор", "Страховой полис"];
+
 const NewOrderModal = ({ onClose, onAdd }: { onClose: () => void; onAdd: (order: typeof ORDERS[0]) => void }) => {
   const [form, setForm] = useState({ from: "", to: "", cargo: "", weight: "", driver: "" });
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [done, setDone] = useState(false);
+  const [files, setFiles] = useState<UploadedFile[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const [docType, setDocType] = useState("Накладная");
+  const fileInputRef = { current: null as HTMLInputElement | null };
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  const simulateUpload = (name: string, size: number) => {
+    const entry: UploadedFile = {
+      name,
+      size: size > 1024 * 1024 ? `${(size / 1024 / 1024).toFixed(1)} МБ` : `${Math.round(size / 1024)} KB`,
+      type: docType,
+      status: "uploading",
+    };
+    setFiles(prev => [...prev, entry]);
+    setTimeout(() => {
+      setFiles(prev => prev.map(f => f.name === name ? { ...f, status: "done" } : f));
+    }, 900);
+  };
+
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    Array.from(e.dataTransfer.files).forEach(f => simulateUpload(f.name, f.size));
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    Array.from(e.target.files || []).forEach(f => simulateUpload(f.name, f.size));
+  };
+
+  const removeFile = (name: string) => setFiles(prev => prev.filter(f => f.name !== name));
 
   const handleSubmit = () => {
     const id = `ORD-${4822 + Math.floor(Math.random() * 10)}`;
@@ -208,11 +241,12 @@ const NewOrderModal = ({ onClose, onAdd }: { onClose: () => void; onAdd: (order:
       doc: `НК-${id.slice(4)}`,
     });
     setDone(true);
-    setTimeout(onClose, 1400);
+    setTimeout(onClose, 1600);
   };
 
   const canNext1 = form.from && form.to && form.from !== form.to;
   const canNext2 = form.cargo;
+  const stepLabels = ["Маршрут", "Груз", "Водитель", "Документы"];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }} onClick={onClose}>
@@ -225,7 +259,7 @@ const NewOrderModal = ({ onClose, onAdd }: { onClose: () => void; onAdd: (order:
           <div>
             <h3 className="font-semibold text-sm">Новый заказ</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {step === 1 ? "Откуда и куда" : step === 2 ? "Что везём" : "Назначить водителя"}
+              {step === 1 ? "Откуда и куда" : step === 2 ? "Что везём" : step === 3 ? "Назначить водителя" : "Прикрепить документы"}
             </p>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -235,10 +269,15 @@ const NewOrderModal = ({ onClose, onAdd }: { onClose: () => void; onAdd: (order:
 
         {/* Step indicator */}
         <div className="flex px-5 pt-4 gap-1.5">
-          {[1, 2, 3].map(s => (
-            <div key={s} className="flex-1 h-0.5 rounded-full transition-all" style={{
-              background: s <= step ? "hsl(195 80% 52%)" : "hsl(220 12% 16%)"
-            }} />
+          {[1, 2, 3, 4].map(s => (
+            <div key={s} className="flex-1 flex flex-col gap-1">
+              <div className="h-0.5 rounded-full transition-all" style={{
+                background: s <= step ? "hsl(195 80% 52%)" : "hsl(220 12% 16%)"
+              }} />
+              <span className="text-center" style={{ fontSize: 10, color: s <= step ? "hsl(195 80% 52%)" : "hsl(215 15% 40%)" }}>
+                {stepLabels[s - 1]}
+              </span>
+            </div>
           ))}
         </div>
 
@@ -313,7 +352,7 @@ const NewOrderModal = ({ onClose, onAdd }: { onClose: () => void; onAdd: (order:
                 />
               </div>
             </div>
-          ) : (
+          ) : step === 3 ? (
             <div className="flex flex-col gap-2">
               <p className="text-xs text-muted-foreground mb-1">Выберите свободного водителя</p>
               {DRIVERS.filter(d => d.status === "free").map(d => (
@@ -350,6 +389,88 @@ const NewOrderModal = ({ onClose, onAdd }: { onClose: () => void; onAdd: (order:
                 <p className="text-xs text-muted-foreground">Назначить позже</p>
               </button>
             </div>
+          ) : (
+            /* Step 4 — Documents */
+            <div className="flex flex-col gap-3">
+              {/* Doc type selector */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs text-muted-foreground">Тип документа</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {DOC_TYPES.map(t => (
+                    <button
+                      key={t}
+                      onClick={() => setDocType(t)}
+                      className={`px-2.5 py-1 rounded-md border text-xs transition-all
+                        ${docType === t ? "border-cyan-500/50 text-cyan" : "border-surface text-muted-foreground hover:border-border hover:text-foreground"}
+                      `}
+                      style={docType === t ? { background: "hsl(195 80% 52% / 0.07)" } : {}}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Drop zone */}
+              <div
+                onDragOver={e => { e.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={handleFileDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded-lg border-2 border-dashed transition-all cursor-pointer flex flex-col items-center gap-2 py-6"
+                style={{
+                  borderColor: dragging ? "hsl(195 80% 52%)" : "hsl(220 12% 20%)",
+                  background: dragging ? "hsl(195 80% 52% / 0.05)" : "transparent",
+                }}
+              >
+                <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "hsl(220 12% 12%)" }}>
+                  <Icon name="Upload" size={18} className="text-muted-foreground" />
+                </div>
+                <div className="text-center">
+                  <p className="text-xs font-medium">Перетащите файл сюда</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">или нажмите для выбора · PDF, JPG, PNG</p>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  className="hidden"
+                  onChange={handleFileInput}
+                />
+              </div>
+
+              {/* File list */}
+              {files.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  {files.map((f, i) => (
+                    <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-surface surface-2">
+                      <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0" style={{ background: "hsl(220 12% 16%)" }}>
+                        <Icon name="FileText" size={13} className="text-muted-foreground" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{f.name}</p>
+                        <p className="text-xs text-muted-foreground">{f.type} · {f.size}</p>
+                      </div>
+                      {f.status === "uploading" ? (
+                        <div className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin shrink-0" style={{ borderColor: "hsl(195 80% 52%)" }} />
+                      ) : (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Icon name="CheckCircle" size={14} className="text-green" />
+                          <button onClick={() => removeFile(f.name)} className="text-muted-foreground hover:text-foreground transition-colors">
+                            <Icon name="X" size={13} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {files.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center">Можно пропустить и добавить документы позже</p>
+              )}
+            </div>
           )}
         </div>
 
@@ -358,16 +479,16 @@ const NewOrderModal = ({ onClose, onAdd }: { onClose: () => void; onAdd: (order:
           <div className="px-5 pb-5 flex gap-2">
             {step > 1 && (
               <button
-                onClick={() => setStep(s => (s - 1) as 1 | 2 | 3)}
+                onClick={() => setStep(s => (s - 1) as 1 | 2 | 3 | 4)}
                 className="flex-1 border border-surface rounded-lg py-2.5 text-sm text-muted-foreground hover:text-foreground transition-all"
               >
                 Назад
               </button>
             )}
-            {step < 3 ? (
+            {step < 4 ? (
               <button
-                onClick={() => setStep(s => (s + 1) as 1 | 2 | 3)}
-                disabled={step === 1 ? !canNext1 : !canNext2}
+                onClick={() => setStep(s => (s + 1) as 1 | 2 | 3 | 4)}
+                disabled={step === 1 ? !canNext1 : step === 2 ? !canNext2 : false}
                 className="flex-1 rounded-lg py-2.5 text-sm font-medium text-background transition-all disabled:opacity-30"
                 style={{ background: "hsl(195 80% 52%)" }}
               >
@@ -376,10 +497,11 @@ const NewOrderModal = ({ onClose, onAdd }: { onClose: () => void; onAdd: (order:
             ) : (
               <button
                 onClick={handleSubmit}
-                className="flex-1 rounded-lg py-2.5 text-sm font-medium text-background transition-all"
+                className="flex-1 rounded-lg py-2.5 text-sm font-medium text-background transition-all flex items-center justify-center gap-2"
                 style={{ background: "hsl(195 80% 52%)" }}
               >
-                Создать заказ
+                <Icon name="CheckCheck" size={14} />
+                Создать заказ {files.filter(f => f.status === "done").length > 0 && `· ${files.filter(f => f.status === "done").length} док.`}
               </button>
             )}
           </div>
