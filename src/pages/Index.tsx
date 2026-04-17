@@ -1,8 +1,114 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Icon from "@/components/ui/icon";
 
 // ─── Types ───────────────────────────────────────────────
 type Section = "orders" | "map" | "fleets" | "drivers" | "chats" | "analytics" | "profile" | "documents";
+
+type ToastType = "success" | "info" | "warning" | "error";
+type Toast = { id: number; type: ToastType; title: string; desc?: string };
+type NotifItem = { id: number; type: ToastType; title: string; desc?: string; time: string; read: boolean };
+
+// ─── Toast System ────────────────────────────────────────
+let _toastId = 0;
+type ToastListener = (t: Toast) => void;
+const toastListeners: ToastListener[] = [];
+export const notify = (type: ToastType, title: string, desc?: string) => {
+  const toast: Toast = { id: ++_toastId, type, title, desc };
+  toastListeners.forEach(fn => fn(toast));
+};
+
+const TOAST_ICONS: Record<ToastType, string> = {
+  success: "CheckCircle",
+  info: "Info",
+  warning: "AlertTriangle",
+  error: "XCircle",
+};
+const TOAST_COLORS: Record<ToastType, string> = {
+  success: "hsl(142 60% 48%)",
+  info: "hsl(195 80% 52%)",
+  warning: "hsl(38 92% 55%)",
+  error: "hsl(0 70% 55%)",
+};
+
+const ToastContainer = ({ onAdd }: { onAdd: (n: Omit<NotifItem, "id" | "read">) => void }) => {
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  useEffect(() => {
+    const listener: ToastListener = (t) => {
+      setToasts(prev => [...prev, t]);
+      onAdd({ type: t.type, title: t.title, desc: t.desc, time: new Date().toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" }) });
+      setTimeout(() => setToasts(prev => prev.filter(x => x.id !== t.id)), 4000);
+    };
+    toastListeners.push(listener);
+    return () => { const i = toastListeners.indexOf(listener); if (i > -1) toastListeners.splice(i, 1); };
+  }, [onAdd]);
+
+  return (
+    <div className="fixed bottom-5 right-5 z-[100] flex flex-col gap-2 pointer-events-none">
+      {toasts.map(t => (
+        <div
+          key={t.id}
+          className="pointer-events-auto flex items-start gap-3 rounded-xl border border-surface shadow-2xl px-4 py-3 animate-slide-up"
+          style={{ background: "hsl(220 13% 10%)", minWidth: 280, maxWidth: 340 }}
+        >
+          <Icon name={TOAST_ICONS[t.type]} size={16} style={{ color: TOAST_COLORS[t.type], marginTop: 1, flexShrink: 0 }} />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold leading-snug">{t.title}</p>
+            {t.desc && <p className="text-xs text-muted-foreground mt-0.5">{t.desc}</p>}
+          </div>
+          <button
+            onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
+            className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+          >
+            <Icon name="X" size={13} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ─── Notification Panel ───────────────────────────────────
+const NotifPanel = ({ items, onClose, onReadAll }: { items: NotifItem[]; onClose: () => void; onReadAll: () => void }) => (
+  <div
+    className="absolute top-10 right-0 w-80 rounded-xl border border-surface shadow-2xl z-50 overflow-hidden animate-fade-in"
+    style={{ background: "hsl(220 13% 9%)" }}
+  >
+    <div className="flex items-center justify-between px-4 py-3 border-b border-surface">
+      <p className="text-xs font-semibold">Уведомления</p>
+      <div className="flex items-center gap-2">
+        {items.some(n => !n.read) && (
+          <button onClick={onReadAll} className="text-xs text-cyan hover:opacity-70 transition-opacity">Прочитать все</button>
+        )}
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          <Icon name="X" size={14} />
+        </button>
+      </div>
+    </div>
+    <div className="max-h-72 overflow-y-auto">
+      {items.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
+          <Icon name="BellOff" size={22} />
+          <p className="text-xs">Нет уведомлений</p>
+        </div>
+      ) : (
+        items.slice().reverse().map(n => (
+          <div key={n.id} className={`flex items-start gap-3 px-4 py-3 border-b border-surface last:border-0 transition-colors ${!n.read ? "bg-cyan-500/5" : ""}`}>
+            <Icon name={TOAST_ICONS[n.type]} size={14} style={{ color: TOAST_COLORS[n.type], marginTop: 1, flexShrink: 0 }} />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium leading-snug">{n.title}</p>
+              {n.desc && <p className="text-xs text-muted-foreground mt-0.5 truncate">{n.desc}</p>}
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-xs text-muted-foreground">{n.time}</span>
+              {!n.read && <span className="w-1.5 h-1.5 rounded-full" style={{ background: "hsl(195 80% 52%)" }} />}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  </div>
+);
 
 // ─── Mock Data ────────────────────────────────────────────
 const ORDERS = [
@@ -240,6 +346,10 @@ const NewOrderModal = ({ onClose, onAdd }: { onClose: () => void; onAdd: (order:
       date: "17 апр",
       doc: `НК-${id.slice(4)}`,
     });
+    notify("success", `Заказ ${id} создан`, `${form.from} → ${form.to} · ${form.cargo}`);
+    if (files.filter(f => f.status === "done").length > 0) {
+      notify("info", "Документы прикреплены", `${files.filter(f => f.status === "done").length} файл(а) загружено`);
+    }
     setDone(true);
     setTimeout(onClose, 1600);
   };
@@ -745,13 +855,27 @@ const FleetsSection = () => (
 // ─── Chats Section ────────────────────────────────────────
 const ChatsSection = () => {
   const [active, setActive] = useState(CHATS[0]);
-  const mockMessages = [
+  const [inputVal, setInputVal] = useState("");
+  const [messages, setMessages] = useState([
     { from: "them", text: "Добрый день! Подтверждаю принятие заказа.", time: "11:30" },
     { from: "me", text: "Отлично. Место погрузки: ул. Складская, 14.", time: "11:32" },
     { from: "them", text: "Понял, буду около 13:00.", time: "11:35" },
     { from: "me", text: "Хорошо, вас встретят.", time: "11:36" },
     { from: "them", text: active.last, time: active.time },
-  ];
+  ]);
+  const mockMessages = messages;
+
+  const sendMessage = () => {
+    if (!inputVal.trim()) return;
+    const time = new Date().toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
+    setMessages(prev => [...prev, { from: "me", text: inputVal.trim(), time }]);
+    notify("info", `Сообщение отправлено`, `${active.participant} · ${active.order}`);
+    setInputVal("");
+    setTimeout(() => {
+      setMessages(prev => [...prev, { from: "them", text: "Принял, спасибо!", time }]);
+      notify("success", `Новое сообщение от ${active.participant}`, active.order);
+    }, 1800);
+  };
 
   return (
     <div className="flex-1 flex gap-4 animate-fade-in" style={{ minHeight: 0 }}>
@@ -809,9 +933,16 @@ const ChatsSection = () => {
         <div className="border-t border-surface px-4 py-3 flex gap-2">
           <input
             placeholder="Написать сообщение..."
+            value={inputVal}
+            onChange={e => setInputVal(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && sendMessage()}
             className="flex-1 bg-secondary rounded-lg px-3 py-2 text-xs outline-none placeholder:text-muted-foreground border border-transparent focus:border-cyan-500/40 transition-colors"
           />
-          <button className="rounded-lg px-3 py-2 text-xs font-medium transition-colors text-background" style={{ background: "hsl(195 80% 52%)" }}>
+          <button
+            onClick={sendMessage}
+            className="rounded-lg px-3 py-2 text-xs font-medium transition-colors text-background"
+            style={{ background: "hsl(195 80% 52%)" }}
+          >
             <Icon name="Send" size={13} />
           </button>
         </div>
@@ -1008,6 +1139,23 @@ const NAV_ITEMS: { id: Section; label: string; icon: string; badge?: number }[] 
 // ─── Main App ─────────────────────────────────────────────
 export default function Index() {
   const [section, setSection] = useState<Section>("orders");
+  const [notifs, setNotifs] = useState<NotifItem[]>([]);
+  const [notifOpen, setNotifOpen] = useState(false);
+  let _nid = 0;
+
+  const addNotif = useCallback((n: Omit<NotifItem, "id" | "read">) => {
+    setNotifs(prev => [...prev, { ...n, id: ++_nid, read: false }]);
+  }, []);
+
+  const unreadCount = notifs.filter(n => !n.read).length;
+
+  // Simulate incoming notification on mount
+  useEffect(() => {
+    const t = setTimeout(() => {
+      notify("warning", "Водитель Смирнов Д.К.", "Задержка на 20 мин · ORD-4819");
+    }, 2500);
+    return () => clearTimeout(t);
+  }, []);
 
   const renderSection = () => {
     switch (section) {
@@ -1024,6 +1172,7 @@ export default function Index() {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
+      <ToastContainer onAdd={addNotif} />
       {/* Sidebar */}
       <aside className="w-56 border-r border-surface flex flex-col shrink-0" style={{ background: "hsl(220 14% 5%)" }}>
         <div className="px-5 py-4 border-b border-surface">
@@ -1096,10 +1245,29 @@ export default function Index() {
             />
           </div>
           <div className="flex items-center gap-3">
-            <button className="relative text-muted-foreground hover:text-foreground transition-colors">
-              <Icon name="Bell" size={16} />
-              <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-background" style={{ background: "hsl(195 80% 52%)" }} />
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => { setNotifOpen(o => !o); setNotifs(prev => prev.map(n => ({ ...n, read: true }))); }}
+                className="relative text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Icon name="Bell" size={16} />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-background text-background flex items-center justify-center font-bold" style={{ background: "hsl(195 80% 52%)", fontSize: 9 }}>
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </button>
+              {notifOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
+                  <NotifPanel
+                    items={notifs}
+                    onClose={() => setNotifOpen(false)}
+                    onReadAll={() => setNotifs(prev => prev.map(n => ({ ...n, read: true })))}
+                  />
+                </>
+              )}
+            </div>
             <div className="h-5 w-px bg-border" />
             <span className="font-mono text-xs text-muted-foreground">17 апр 2026</span>
           </div>
